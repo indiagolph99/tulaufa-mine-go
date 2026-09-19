@@ -42,4 +42,4 @@ jobs:
         run: CGO_ENABLED=0 go build ./...
 
       - name: Shellcheck deploy scripts
-        run: shellcheck deploy/mc-ctl deploy/setup.sh deploy/setup-nginx.sh testdata/mc-ctl-stub
+        run: shellcheck deploy/mc-ctl deploy/setup.sh deploy/setup-nginx.sh deploy/install-remote.sh testdata/mc-ctl-stub

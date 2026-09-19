@@ -2,20 +2,45 @@
 # One-time VPS setup for the tulaufa-mine control API. Run as root.
 # Idempotent: safe to re-run after changing mc-ctl or the unit file.
 #
-#   ssh -p 7224 root@<host> 'bash -s' < deploy/setup.sh
+#   ./deploy/install-remote.sh root@<host> -p <port> --base-only
 #
-# It does NOT write the password hash or touch nginx — both are deliberate
-# manual steps, noted at the end.
+# Must run with its sibling files (mc-ctl, the unit) present, so it cannot be
+# piped on its own — install-remote.sh sends the whole directory.
+#
+# It does NOT write the password hash or touch nginx — both are separate steps,
+# noted at the end.
 set -euo pipefail
 
 SVC_USER=tulaufa-mine
 INSTALL_DIR=/opt/tulaufa-mine
 CONF_DIR=/etc/tulaufa-mine
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# When this script is piped (`bash -s`), BASH_SOURCE is empty and dirname
+# resolves to the remote cwd — where mc-ctl and the unit file do not exist.
+# Ship the whole deploy/ directory instead; see install-remote.sh.
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || echo .)"
 
 say() { printf '\n== %s\n' "$1"; }
 
+for needed in mc-ctl tulaufa-mine.service; do
+    [ -f "$HERE/$needed" ] && continue
+    cat >&2 <<'MISSING'
+!! This script needs the other files from deploy/ beside it, and they are not here.
+
+   Piping it alone (ssh ... 'bash -s' < deploy/setup.sh) cannot work: mc-ctl and
+   the unit file never reach the server. Send the whole directory instead:
+
+     ./deploy/install-remote.sh root@HOST -p PORT
+
+   or by hand:
+
+     tar czf - -C deploy . | ssh -p PORT root@HOST \
+       'd=$(mktemp -d) && tar xzf - -C "$d" && bash "$d/setup.sh"; rm -rf "$d"'
+MISSING
+    exit 1
+done
+
 [ "$(id -u)" -eq 0 ] || { echo "run as root" >&2; exit 1; }
+
 
 say "service user"
 if id -u "$SVC_USER" >/dev/null 2>&1; then
