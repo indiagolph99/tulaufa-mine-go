@@ -35,10 +35,10 @@ func newTestAPI(t *testing.T) http.Handler {
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 
 	return New(Config{
-		PasswordHash:  hash,
-		AllowedOrigin: testOrigin,
-		SessionTTL:    time.Hour,
-		SecureCookie:  false,
+		PasswordHash:   hash,
+		AllowedOrigins: []string{testOrigin, "http://localhost:5173"},
+		SessionTTL:     time.Hour,
+		SecureCookie:   false,
 	}, ctl, mc.NewBroadcaster(ctl, 2, log), log).Handler()
 }
 
@@ -223,5 +223,31 @@ func TestSSEStreamsLines(t *testing.T) {
 	}
 	if !bytes.Contains(buf[:n], []byte("event: line")) {
 		t.Fatalf("stream did not start with an SSE event: %q", buf[:n])
+	}
+}
+
+// A second entry in the list must work — that is the whole point of allowing
+// several, since local development uses localhost, 127.0.0.1 and whichever port
+// Vite settles on.
+func TestSecondAllowedOriginWorks(t *testing.T) {
+	h := newTestAPI(t)
+	rec := post(t, h, "/api/mc/login", `{"password":"`+testPassword+`"}`, "http://localhost:5173", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("second allowed origin = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestUnlistedOriginStillRejected(t *testing.T) {
+	h := newTestAPI(t)
+	for _, origin := range []string{
+		"http://localhost:5174",           // not in the list
+		"https://tulaufa.ru.evil.example", // suffix trick
+		"https://evil.example/tulaufa.ru", // path trick
+		"http://tulaufa.ru",               // wrong scheme
+	} {
+		rec := post(t, h, "/api/mc/login", `{"password":"`+testPassword+`"}`, origin, nil)
+		if rec.Code != http.StatusForbidden {
+			t.Errorf("origin %q = %d, want 403", origin, rec.Code)
+		}
 	}
 }

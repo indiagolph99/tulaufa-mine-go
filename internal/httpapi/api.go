@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -21,10 +22,14 @@ const (
 )
 
 type Config struct {
-	PasswordHash  string
-	AllowedOrigin string // e.g. https://tulaufa.ru
-	SessionTTL    time.Duration
-	SecureCookie  bool // false only for local http development
+	PasswordHash string
+	// Exact origins permitted to make state-changing requests. A list rather
+	// than one value because local development legitimately has several:
+	// localhost and 127.0.0.1 are distinct origins, and Vite moves to the next
+	// free port when 5173 is taken.
+	AllowedOrigins []string
+	SessionTTL     time.Duration
+	SecureCookie   bool // false only for local http development
 }
 
 type API struct {
@@ -72,16 +77,20 @@ func (a *API) requireSession(next http.HandlerFunc) http.HandlerFunc {
 }
 
 // checkOrigin guards state-changing requests. Combined with SameSite=Strict this
-// closes CSRF without a token round-trip.
+// closes CSRF without a token round-trip. Matching stays exact — no prefix or
+// suffix rules, which are the usual way origin checks get quietly defeated.
 func (a *API) checkOrigin(r *http.Request) error {
 	origin := r.Header.Get("Origin")
 	if origin == "" {
 		return errors.New("missing Origin header")
 	}
-	if origin != a.cfg.AllowedOrigin {
-		return fmt.Errorf("origin %q not allowed", origin)
+	if slices.Contains(a.cfg.AllowedOrigins, origin) {
+		return nil
 	}
-	return nil
+	// Naming the permitted values costs nothing — they are public URLs — and
+	// turns a dead end into an obvious fix during local development.
+	return fmt.Errorf("origin %q not allowed (allowed: %s)",
+		origin, strings.Join(a.cfg.AllowedOrigins, ", "))
 }
 
 // --- handlers -----------------------------------------------------------

@@ -45,10 +45,18 @@ Systemd не нужен — есть заглушка:
 ```sh
 export MC_CTL="$PWD/testdata/mc-ctl-stub"
 export ADMIN_PASSWORD_HASH="$(go run ./cmd/tulaufa-mine hash)"   # спросит пароль
-export ALLOWED_ORIGIN=http://localhost:5173
+export ALLOWED_ORIGIN=http://localhost:5173,http://127.0.0.1:5173
 export SECURE_COOKIE=false
 go run ./cmd/tulaufa-mine
 ```
+
+`ALLOWED_ORIGIN` принимает список через запятую. Это нужно, потому что
+`localhost` и `127.0.0.1` — разные origin'ы, а Vite занимает следующий свободный
+порт, если 5173 уже занят. Сравнение точное: ни префиксов, ни суффиксов —
+именно так проверки origin обычно и обходят.
+
+Если при входе приходит `origin "…" not allowed`, в тексте ошибки перечислены
+разрешённые значения — сверьте с адресом в адресной строке.
 
 Тесты: `go test ./...`. Проверка: `go vet ./...`.
 
@@ -57,7 +65,7 @@ go run ./cmd/tulaufa-mine
 | Переменная | По умолчанию | Назначение |
 |---|---|---|
 | `ADMIN_PASSWORD_HASH` | — (обязательна) | результат `tulaufa-mine hash` |
-| `ALLOWED_ORIGIN` | `https://tulaufa.ru` | допустимый `Origin` |
+| `ALLOWED_ORIGIN` | `https://tulaufa.ru` | допустимые `Origin`, через запятую |
 | `LISTEN_ADDR` | `127.0.0.1:8787` | адрес прослушивания |
 | `SESSION_TTL` | `12h` | время жизни сессии |
 | `SECURE_COOKIE` | `true` | выключать только для localhost без TLS |

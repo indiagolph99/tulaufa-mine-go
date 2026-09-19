@@ -137,10 +137,13 @@ func run() error {
 	log := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
 	cfg := httpapi.Config{
-		PasswordHash:  os.Getenv("ADMIN_PASSWORD_HASH"),
-		AllowedOrigin: envOr("ALLOWED_ORIGIN", "https://tulaufa.ru"),
-		SessionTTL:    envDuration("SESSION_TTL", 12*time.Hour),
-		SecureCookie:  envBool("SECURE_COOKIE", true),
+		PasswordHash:   os.Getenv("ADMIN_PASSWORD_HASH"),
+		AllowedOrigins: splitList(envOr("ALLOWED_ORIGIN", "https://tulaufa.ru")),
+		SessionTTL:     envDuration("SESSION_TTL", 12*time.Hour),
+		SecureCookie:   envBool("SECURE_COOKIE", true),
+	}
+	if len(cfg.AllowedOrigins) == 0 {
+		return errors.New("ALLOWED_ORIGIN is empty")
 	}
 	if cfg.PasswordHash == "" {
 		return errors.New("ADMIN_PASSWORD_HASH is not set — run `tulaufa-mine hash` to generate one")
@@ -176,7 +179,7 @@ func run() error {
 
 	errCh := make(chan error, 1)
 	go func() {
-		log.Info("listening", "addr", addr, "origin", cfg.AllowedOrigin)
+		log.Info("listening", "addr", addr, "origins", strings.Join(cfg.AllowedOrigins, ","))
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errCh <- err
 		}
@@ -192,6 +195,17 @@ func run() error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	return srv.Shutdown(shutdownCtx)
+}
+
+// splitList parses a comma-separated env value, dropping blanks and spaces.
+func splitList(s string) []string {
+	var out []string
+	for _, part := range strings.Split(s, ",") {
+		if part = strings.TrimSpace(part); part != "" {
+			out = append(out, part)
+		}
+	}
+	return out
 }
 
 // splitCommand turns "sudo -n /usr/local/bin/mc-ctl" into its program and args.
