@@ -2,12 +2,15 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
 	"strconv"
 	"strings"
@@ -36,20 +39,98 @@ func main() {
 // runHash turns a password read from stdin into the encoded hash for
 // ADMIN_PASSWORD_HASH, so the plaintext never has to travel anywhere.
 func runHash() error {
-	fmt.Fprint(os.Stderr, "password: ")
-	var pw string
-	if _, err := fmt.Scanln(&pw); err != nil {
-		return fmt.Errorf("read password: %w", err)
+	interactive := isTerminal(os.Stdin)
+
+	pw, err := readSecret("password: ", interactive)
+	if err != nil {
+		return err
 	}
-	if len(pw) < 12 {
+	if len([]rune(pw)) < 12 {
 		return errors.New("use at least 12 characters — this guards a root-adjacent endpoint")
 	}
+
+	// With echo off a typo is invisible, so confirm before committing to a hash
+	// that would lock the operator out.
+	if interactive {
+		again, err := readSecret("again: ", true)
+		if err != nil {
+			return err
+		}
+		if again != pw {
+			return errors.New("passwords did not match")
+		}
+	}
+
 	encoded, err := auth.HashPassword(pw)
 	if err != nil {
 		return err
 	}
 	fmt.Println(encoded)
 	return nil
+}
+
+// readSecret reads one whole line, spaces included, so passphrases work. Echo is
+// suppressed via stty when there is a terminal to suppress it on.
+func readSecret(prompt string, hideEcho bool) (string, error) {
+	fmt.Fprint(os.Stderr, prompt)
+
+	if hideEcho {
+		if restore, err := setEcho(false); err == nil {
+			defer func() {
+				_, _ = restore()
+				fmt.Fprintln(os.Stderr)
+			}()
+		} else {
+			fmt.Fprintln(os.Stderr, "\n(warning: could not disable echo; the password will be visible)")
+			fmt.Fprint(os.Stderr, prompt)
+		}
+	}
+
+	reader := bufio.NewReader(os.Stdin)
+	line, err := reader.ReadString('\n')
+	if err != nil && !errors.Is(err, io.EOF) {
+		return "", fmt.Errorf("read password: %w", err)
+	}
+	line = strings.TrimRight(line, "\r\n")
+	if line == "" {
+		return "", errors.New("empty password")
+	}
+	return line, nil
+}
+
+// setEcho toggles terminal echo and returns a function restoring the previous
+// state. stty keeps this dependency-free; x/term is not reachable through the
+// proxy this project builds behind.
+func setEcho(on bool) (restore func() ([]byte, error), err error) {
+	saved, err := exec.Command("stty", "-F", "/dev/tty", "-g").Output()
+	if err != nil {
+		// macOS stty has no -F; it takes the terminal on stdin instead.
+		saved, err = sttyStdin("-g")
+		if err != nil {
+			return nil, err
+		}
+	}
+	state := strings.TrimSpace(string(saved))
+
+	arg := "-echo"
+	if on {
+		arg = "echo"
+	}
+	if _, err := sttyStdin(arg); err != nil {
+		return nil, err
+	}
+	return func() ([]byte, error) { return sttyStdin(state) }, nil
+}
+
+func sttyStdin(args ...string) ([]byte, error) {
+	cmd := exec.Command("stty", args...)
+	cmd.Stdin = os.Stdin
+	return cmd.Output()
+}
+
+func isTerminal(f *os.File) bool {
+	info, err := f.Stat()
+	return err == nil && info.Mode()&os.ModeCharDevice != 0
 }
 
 func run() error {
