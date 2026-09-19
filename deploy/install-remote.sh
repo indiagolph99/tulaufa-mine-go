@@ -25,6 +25,9 @@ done
 
 [ -n "$TARGET" ] || { echo "usage: install-remote.sh root@HOST [-p PORT]" >&2; exit 64; }
 
+# $d is the remote temp dir: these must stay single-quoted so the remote shell
+# expands them, not this one.
+# shellcheck disable=SC2016
 case "$WHICH" in
     both)  remote_cmd='bash "$d/setup.sh" && bash "$d/setup-nginx.sh"' ;;
     base)  remote_cmd='bash "$d/setup.sh"' ;;
