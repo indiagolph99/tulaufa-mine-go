@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# Stand-in for the real mc-ctl so the daemon and its tests run on a machine
+# without systemd. Mirrors the real script's interface exactly.
+set -euo pipefail
+
+case "${1:-}" in
+    status)
+        cat <<'OUT'
+ActiveState=active
+SubState=running
+UnitFileState=enabled
+MainPID=4242
+MemoryCurrent=3221225472
+ActiveEnterTimestamp=Fri 2026-09-19 11:30:02 UTC
+OUT
+        ;;
+    start|stop|restart)
+        echo "stub: $1 ok" >&2
+        ;;
+    logs-follow)
+        i=0
+        while true; do
+            echo "2026-09-19T12:00:$(printf '%02d' $((i % 60)))+0000 minecraft[4242]: stub log line $i"
+            i=$((i + 1))
+            sleep 0.2
+        done
+        ;;
+    *)
+        echo "usage: mc-ctl-stub status|start|stop|restart|logs-follow" >&2
+        exit 64
+        ;;
+esac

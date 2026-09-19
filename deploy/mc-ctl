@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# mc-ctl — the only privileged entry point for the tulaufa-mine daemon.
+#
+# Installed root-owned 0755 at /usr/local/bin/mc-ctl and reachable through a
+# single NOPASSWD sudoers rule. Every systemd invocation below is hardcoded:
+# nothing the caller passes ever reaches systemctl or journalctl as an argument,
+# so there is no argument for an attacker to bend.
+set -euo pipefail
+
+UNIT=minecraft.service
+
+usage() {
+    echo "usage: mc-ctl status|start|stop|restart|logs-follow" >&2
+    exit 64
+}
+
+[ $# -eq 1 ] || usage
+
+case "$1" in
+    status)
+        # `show` never fails on a stopped unit, unlike `status`.
+        exec /usr/bin/systemctl show "$UNIT" \
+            --property=ActiveState \
+            --property=SubState \
+            --property=UnitFileState \
+            --property=MainPID \
+            --property=MemoryCurrent \
+            --property=ActiveEnterTimestamp
+        ;;
+    start)   exec /usr/bin/systemctl start   "$UNIT" ;;
+    stop)    exec /usr/bin/systemctl stop    "$UNIT" ;;
+    restart) exec /usr/bin/systemctl restart "$UNIT" ;;
+    logs-follow)
+        exec /usr/bin/journalctl -u "$UNIT" -n 200 -f --output=short-iso --no-pager
+        ;;
+    *)
+        usage
+        ;;
+esac
