@@ -3,12 +3,21 @@ Description=tulaufa.ru minecraft control API
 After=network.target
 Wants=network.target
 
+# Give up after repeated failures instead of restarting forever; a
+# misconfiguration should end in a visible failed state, not a loop.
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
 [Service]
 Type=simple
 User=tulaufa-mine
 Group=tulaufa-mine
 ExecStart=/opt/tulaufa-mine/tulaufa-mine
-EnvironmentFile=/etc/tulaufa-mine/env
+# Optional on purpose. A mandatory EnvironmentFile that is missing makes
+# systemd refuse to spawn the process at all, reporting only "unavailable
+# resources or another system error". Letting it be absent means the binary
+# starts and says exactly what is wrong: "ADMIN_PASSWORD_HASH is not set".
+EnvironmentFile=-/etc/tulaufa-mine/env
 Restart=on-failure
 RestartSec=5
 

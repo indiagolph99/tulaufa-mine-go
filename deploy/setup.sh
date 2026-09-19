@@ -99,6 +99,14 @@ systemctl daemon-reload
 systemctl enable tulaufa-mine.service >/dev/null
 echo "  unit installed and enabled"
 
+say "config file"
+if [ -s "$CONF_DIR/env" ]; then
+    echo "  $CONF_DIR/env present"
+else
+    echo "  $CONF_DIR/env MISSING — the service will start and immediately exit"
+    echo "  with 'ADMIN_PASSWORD_HASH is not set'. See step 3 below."
+fi
+
 say "verification"
 echo -n "  wrapper as $SVC_USER: "
 if sudo -u "$SVC_USER" sudo -n /usr/local/bin/mc-ctl status >/dev/null 2>&1; then
