@@ -1,7 +1,9 @@
 name: deploy
 
-# manual only. the gate is the 'production' environment: it holds the required
-# reviewer, the branch policy and the secrets.
+# manual only. the 'production' environment scopes the secrets, but this repo is
+# private on a free plan, where environment protection rules (required reviewer,
+# branch policy) are unavailable — so the branch restriction is enforced by the
+# guard step below instead.
 on:
   workflow_dispatch:
 
@@ -20,6 +22,15 @@ jobs:
       url: https://tulaufa.ru/minecraft-admin
 
     steps:
+      - name: Guard — main only
+        env:
+          REF: ${{ github.ref }}
+        run: |
+          if [ "$REF" != "refs/heads/main" ]; then
+            echo "::error::deploy only runs from main (got ${REF#refs/heads/})"
+            exit 1
+          fi
+
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
