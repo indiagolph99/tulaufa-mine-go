@@ -85,9 +85,11 @@ cat <<'NEXT'
      printf 'ALLOWED_ORIGIN=https://tulaufa.ru\n' >> /etc/tulaufa-mine/env
      chown root:tulaufa-mine /etc/tulaufa-mine/env && chmod 0640 /etc/tulaufa-mine/env
 
-2. Add the nginx location block from deploy/nginx-snippet.conf to the
-   tulaufa.ru server block, add try_files to location /, then:
-     nginx -t && systemctl reload nginx
+2. Configure nginx. The vhost ships with no location blocks at all, so both
+   `location /` (with try_files, or /minecraft-admin 404s) and `location
+   /api/mc/` have to be created. Do not hand-edit it — run:
+     ssh -p <port> root@<host> 'bash -s' < deploy/setup-nginx.sh
+   It backs up, tests with `nginx -t`, and rolls back on failure.
 
 3. Deploy the binary (CI does this): /opt/tulaufa-mine/tulaufa-mine
      systemctl start tulaufa-mine.service
