@@ -12,6 +12,8 @@
 set -euo pipefail
 
 SVC_USER=tulaufa-mine
+# The CI account that ships new binaries; it must be able to write INSTALL_DIR.
+DEPLOY_USER=deploy
 INSTALL_DIR=/opt/tulaufa-mine
 CONF_DIR=/etc/tulaufa-mine
 # When this script is piped (`bash -s`), BASH_SOURCE is empty and dirname
@@ -51,7 +53,19 @@ else
 fi
 
 say "install dirs"
-install -d -m 0755 -o root -g root "$INSTALL_DIR"
+# INSTALL_DIR belongs to the deploy account: CI rsyncs the binary in as that
+# user. This grants it no new power — deploy already restarts the service, so it
+# decides what runs either way. The privileged part, mc-ctl, stays root-owned
+# outside this directory and deploy cannot touch it.
+if ! id -u "$DEPLOY_USER" >/dev/null 2>&1; then
+    echo "!! user $DEPLOY_USER does not exist — CI could not ship binaries" >&2
+    exit 1
+fi
+install -d -m 0755 -o "$DEPLOY_USER" -g "$DEPLOY_USER" "$INSTALL_DIR"
+# install -d leaves an existing directory's ownership alone on some versions.
+chown "$DEPLOY_USER:$DEPLOY_USER" "$INSTALL_DIR"
+chmod 0755 "$INSTALL_DIR"
+
 install -d -m 0750 -o root -g "$SVC_USER" "$CONF_DIR"
 
 say "privileged wrapper"
@@ -91,6 +105,13 @@ if sudo -u "$SVC_USER" sudo -n /usr/local/bin/mc-ctl status >/dev/null 2>&1; the
     echo "OK"
 else
     echo "FAILED" >&2
+fi
+echo -n "  $DEPLOY_USER can write $INSTALL_DIR: "
+if sudo -u "$DEPLOY_USER" test -w "$INSTALL_DIR"; then
+    echo "OK"
+else
+    echo "FAILED — CI deploys will hit 'Permission denied'" >&2
+    exit 1
 fi
 echo -n "  wrapper refuses junk: "
 if sudo -u "$SVC_USER" sudo -n /usr/local/bin/mc-ctl 'status; id' >/dev/null 2>&1; then
